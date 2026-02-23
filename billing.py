@@ -1,44 +1,72 @@
-from db import get_cursor
-from product import check_stock, update_stock
-from invoice import generate_invoice
 from datetime import datetime
 
+from db import get_cursor
+from invoice import generate_invoice
+from product import check_stock, update_stock
+
 GST_RATE = 0.18
+
 
 def create_bill(items, discount=0):
     conn, cur = get_cursor()
 
-    bill_items = []
-    subtotal = 0
+    try:
+        bill_items = []
+        subtotal = 0
 
-    for name, qty in items:
-        if not check_stock(name, qty):
-            print(f"❌ Insufficient stock for {name}")
+        for name, qty in items:
+            if not check_stock(name, qty):
+                print(f"❌ Insufficient stock for {name}")
+                return
+
+            cur.execute(
+                "SELECT price FROM product WHERE product_name=%s", (name,)
+            )
+            row = cur.fetchone()
+            if row is None:
+                print(f"❌ Product not found: {name}")
+                return
+
+            price = float(row[0])
+
+            total_price = price * qty
+            subtotal += total_price
+            bill_items.append((name, qty, price, total_price))
+
+            if not update_stock(name, qty):
+                print(f"❌ Failed to update stock for {name}")
+                return
+
+        if not bill_items:
+            print("No items to bill.")
             return
 
-        cur.execute("SELECT price FROM product WHERE product_name=%s", (name,))
-        price = cur.fetchone()[0]
+        gst = round(subtotal * GST_RATE, 2)
+        grand_total = round(subtotal + gst - discount, 2)
 
-        total_price = price * qty
-        subtotal += total_price
-        bill_items.append((name, qty, price, total_price))
+        cur.execute(
+            "INSERT INTO bill (bill_date, total_amount) VALUES (%s,%s)",
+            (datetime.now(), grand_total),
+        )
+        bill_id = cur.lastrowid
 
-        update_stock(name, qty)
+        # Store individual line items for reports
+        for name, qty, price, _total_price in bill_items:
+            cur.execute(
+                """
+                INSERT INTO bill_items (bill_id, product_name, quantity, price)
+                VALUES (%s,%s,%s,%s)
+                """,
+                (bill_id, name, qty, price),
+            )
 
-    gst = round(subtotal * GST_RATE, 2)
-    grand_total = round(subtotal + gst - discount, 2)
+        conn.commit()
 
-    cur.execute(
-        "INSERT INTO bill (bill_date, total_amount) VALUES (%s,%s)",
-        (datetime.now(), grand_total)
-    )
-    bill_id = cur.lastrowid
-    conn.commit()
-    conn.close()
+        pdf_path = generate_invoice(
+            bill_id, bill_items, subtotal, gst, discount, grand_total
+        )
 
-    pdf_path = generate_invoice(
-        bill_id, bill_items, subtotal, gst, discount, grand_total
-    )
-
-    print(f"\n✅ Bill Created | Bill ID: {bill_id}")
-    print(f"📄 Invoice saved at: {pdf_path}")
+        print(f"\n✅ Bill Created | Bill ID: {bill_id}")
+        print(f"📄 Invoice saved at: {pdf_path}")
+    finally:
+        conn.close()

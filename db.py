@@ -1,97 +1,120 @@
 import mysql.connector
 from mysql.connector import Error
-from tabulate import tabulate
+
+
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "passwd": "1234manju@2004@#$",
+    "database": "python_db",
+}
 
 
 def get_connection():
-    return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        passwd="1234manju@2004@#$",
-        database="python_db",
-    )
+    """Return a new MySQL connection."""
+    return mysql.connector.connect(**DB_CONFIG)
 
 
-def list_products(cursor):
-    cursor.execute("SELECT * FROM product")
-    res = cursor.fetchall()
-    if not res:
-        print("No products found.")
-        return
-
-    headers = [col[0] for col in cursor.description]
-    table = tabulate([list(row) for row in res], headers=headers, tablefmt="rounded_outline")
-    print(table)
+def get_cursor():
+    """
+    Helper used by other modules.
+    Returns (connection, cursor); caller must close connection.
+    """
+    conn = get_connection()
+    return conn, conn.cursor()
 
 
-def billing_flow(cursor):
-    num_pro = int(input("Enter number of products ordered by customer: "))
-    sql = "SELECT price FROM product WHERE product_name = %s"
-    total_price = 0.0
-    count = 0
-    order_data = []
-
-    for _ in range(num_pro):
-        pro_name = input("Enter product name: ")
-        cursor.execute(sql, (pro_name,))
-        row = cursor.fetchone()
-        if row is None:
-            print(f"Product '{pro_name}' not found, skipping.")
-            continue
-
-        price = float(row[0])
-        total_price += price
-        count += 1
-        order_data.append([count, pro_name, f"₹{price}"])
-
-    order_data.append(["", "Total-price :", f"₹{total_price}"])
-    print(tabulate(order_data, headers=["No", "Order_items", "Price"], tablefmt="rounded_outline"))
-
-
-def add_products(cursor, conn):
-    sql = "INSERT INTO product (product_name, price, quantity, category) VALUES (%s, %s, %s, %s)"
-    val = []
-    n = int(input("Enter how many products you want to insert: "))
-    for _ in range(n):
-        pro_nm = input("Enter a product name: ")
-        price = float(input("Enter product price: "))
-        quantity = int(input("Enter product quantity: "))
-        category = input("Enter product category: ")
-        val.append((pro_nm, price, quantity, category))
-
-    cursor.executemany(sql, val)
-    conn.commit()
-    print(f"{cursor.rowcount} products inserted successfully!")
-
-
-def main():
-    my_db = None
-    my_cursor = None
+def init_db():
+    """Create required tables if they don't already exist."""
+    conn, cur = get_cursor()
     try:
-        my_db = get_connection()
-        my_cursor = my_db.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product (
+                product_id INT PRIMARY KEY AUTO_INCREMENT,
+                product_name VARCHAR(100) NOT NULL UNIQUE,
+                price DECIMAL(10,2) NOT NULL,
+                quantity INT NOT NULL,
+                category VARCHAR(50)
+            )
+            """
+        )
 
-        pro_list = input("Do you want to see all product type (Yes or No): ").strip().lower()
-        if pro_list == "yes":
-            list_products(my_cursor)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INT PRIMARY KEY AUTO_INCREMENT,
+                username VARCHAR(50) NOT NULL UNIQUE,
+                password VARCHAR(100) NOT NULL,
+                role VARCHAR(20) NOT NULL
+            )
+            """
+        )
 
-        desc = int(input("Enter your choice 1 for billing, 2 for adding product: "))
-        if desc == 1:
-            billing_flow(my_cursor)
-        elif desc == 2:
-            add_products(my_cursor, my_db)
-        else:
-            print("Invalid choice.")
-    except Error as e:
-        print(f"Database error: {e}")
-    except ValueError:
-        print("Invalid numeric input.")
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bill (
+                bill_id INT PRIMARY KEY AUTO_INCREMENT,
+                bill_date DATETIME NOT NULL,
+                total_amount DECIMAL(10,2) NOT NULL
+            )
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bill_items (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                bill_id INT NOT NULL,
+                product_name VARCHAR(100) NOT NULL,
+                quantity INT NOT NULL,
+                price DECIMAL(10,2) NOT NULL,
+                FOREIGN KEY (bill_id) REFERENCES bill(bill_id)
+                    ON DELETE CASCADE
+            )
+            """
+        )
+
+        conn.commit()
     finally:
-        if my_cursor is not None:
-            my_cursor.close()
-        if my_db is not None:
-            my_db.close()
+        conn.close()
 
 
-if __name__ == "__main__":
-    main()
+def seed_data():
+    """
+    Insert some dummy users and products if tables are empty.
+    Safe to call multiple times.
+    """
+    conn, cur = get_cursor()
+    try:
+        # Seed users
+        cur.execute("SELECT COUNT(*) FROM users")
+        if cur.fetchone()[0] == 0:
+            users = [
+                ("admin", "admin123", "admin"),
+                ("cashier", "cashier123", "cashier"),
+            ]
+            cur.executemany(
+                "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                users,
+            )
+
+        # Seed products
+        cur.execute("SELECT COUNT(*) FROM product")
+        if cur.fetchone()[0] == 0:
+            products = [
+                ("Apple", 50.0, 100, "Fruit"),
+                ("Banana", 20.0, 150, "Fruit"),
+                ("Milk 1L", 60.0, 80, "Dairy"),
+                ("Bread", 40.0, 60, "Bakery"),
+                ("Eggs (12pc)", 75.0, 50, "Dairy"),
+            ]
+            cur.executemany(
+                "INSERT INTO product (product_name, price, quantity, category) "
+                "VALUES (%s, %s, %s, %s)",
+                products,
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
