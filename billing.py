@@ -3,6 +3,7 @@ from datetime import datetime
 from db import get_cursor
 from invoice import generate_invoice
 from product import check_stock, update_stock
+from utils import console, error, print_table, success
 
 GST_RATE = 0.18
 
@@ -16,7 +17,7 @@ def create_bill(items, discount=0):
 
         for name, qty in items:
             if not check_stock(name, qty):
-                print(f"❌ Insufficient stock for {name}")
+                error(f"Insufficient stock for {name}")
                 return
 
             cur.execute(
@@ -24,7 +25,7 @@ def create_bill(items, discount=0):
             )
             row = cur.fetchone()
             if row is None:
-                print(f"❌ Product not found: {name}")
+                error(f"Product not found: {name}")
                 return
 
             price = float(row[0])
@@ -34,11 +35,11 @@ def create_bill(items, discount=0):
             bill_items.append((name, qty, price, total_price))
 
             if not update_stock(name, qty):
-                print(f"❌ Failed to update stock for {name}")
+                error(f"Failed to update stock for {name}")
                 return
 
         if not bill_items:
-            print("No items to bill.")
+            error("No valid items to bill.")
             return
 
         gst = round(subtotal * GST_RATE, 2)
@@ -62,11 +63,22 @@ def create_bill(items, discount=0):
 
         conn.commit()
 
+        # Show a summary table in the CLI
+        headers = ["Item", "Qty", "Price", "Total"]
+        rows = [(n, q, price, t) for n, q, price, t in bill_items]
+        print_table(headers, rows, title=f"Bill #{bill_id}")
+        console.print(
+            f"\n[bold magenta]Subtotal:[/] {subtotal}  "
+            f"[bold magenta]GST (18%):[/] {gst}  "
+            f"[bold magenta]Discount:[/] {discount}  "
+            f"[bold magenta]Grand Total:[/] [bold green]{grand_total}[/]"
+        )
+
         pdf_path = generate_invoice(
             bill_id, bill_items, subtotal, gst, discount, grand_total
         )
 
-        print(f"\n✅ Bill Created | Bill ID: {bill_id}")
-        print(f"📄 Invoice saved at: {pdf_path}")
+        success(f"Bill Created | Bill ID: {bill_id}")
+        console.print(f"[bold cyan]Invoice saved at:[/] {pdf_path}")
     finally:
         conn.close()

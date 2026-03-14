@@ -3,7 +3,7 @@ from db import init_db, seed_data
 from product import delete_product, search_product, update_product
 from reports import best_selling
 from user import login, register_user
-from utils import menu
+from utils import console, error, info, menu
 
 
 def auth_flow():
@@ -13,11 +13,12 @@ def auth_flow():
         choice = input("Choice: ").strip()
 
         if choice == "1":
+            console.print("[bold cyan]-- Login --[/]")
             username = input("Username: ")
             password = input("Password: ")
             role = login(username, password)
             if not role:
-                print("❌ Login failed")
+                error("Login failed, try again.")
                 continue
             return username, role
 
@@ -28,7 +29,7 @@ def auth_flow():
             return None, None
 
         else:
-            print("Invalid choice, try again.")
+            error("Invalid choice, try again.")
 
 
 def main():
@@ -36,9 +37,10 @@ def main():
     init_db()
     seed_data()
 
+    console.print("[bold green]Welcome to the Billing System[/]")
     username, role = auth_flow()
     if not username:
-        print("Goodbye!")
+        info("Goodbye!")
         return
 
     while True:
@@ -65,7 +67,7 @@ def main():
             try:
                 n = int(input("No of items: "))
             except ValueError:
-                print("Please enter a valid number.")
+                error("Please enter a valid number.")
                 continue
 
             items = []
@@ -74,14 +76,14 @@ def main():
                 try:
                     qty = int(input("Qty: "))
                 except ValueError:
-                    print("Invalid quantity, skipping item.")
+                    error("Invalid quantity, skipping item.")
                     continue
                 items.append((name, qty))
 
             try:
                 discount = float(input("Discount (₹): "))
             except ValueError:
-                print("Invalid discount, using 0.")
+                error("Invalid discount, using 0.")
                 discount = 0.0
 
             create_bill(items, discount)
@@ -95,7 +97,7 @@ def main():
                 price = float(input("New price: "))
                 qty = int(input("New qty: "))
             except ValueError:
-                print("Invalid price/qty.")
+                error("Invalid price/qty.")
                 continue
             update_product(name, price=price, qty=qty)
 
@@ -106,11 +108,11 @@ def main():
             best_selling()
 
         elif choice == "0":
-            print("Goodbye!")
+            info("Goodbye!")
             break
 
         else:
-            print("Invalid choice, try again.")
+            error("Invalid choice, try again.")
 
 
 if __name__ == "__main__":

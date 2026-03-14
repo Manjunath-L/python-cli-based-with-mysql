@@ -1,4 +1,5 @@
 from db import get_cursor
+from utils import console, error, info, success
 
 
 def login(username: str, password: str):
@@ -14,8 +15,9 @@ def login(username: str, password: str):
         )
         row = cur.fetchone()
         if row:
-            print(f"✅ Login successful as {row[0]}")
+            success(f"Login successful as {row[0]}")
             return row[0]
+        error("Invalid username or password.")
         return None
     finally:
         conn.close()
@@ -28,28 +30,29 @@ def register_user():
     """
     conn, cur = get_cursor()
     try:
+        console.print("[bold yellow]-- User Registration --[/]")
         username = input("Choose a username: ").strip()
         password = input("Choose a password: ").strip()
         if not username or not password:
-            print("Username and password cannot be empty.")
+            error("Username and password cannot be empty.")
             return
 
         # Check if username already exists
         cur.execute("SELECT 1 FROM users WHERE username=%s", (username,))
         if cur.fetchone():
-            print("❌ Username already exists, try another.")
+            error("Username already exists, try another.")
             return
 
-        print("Select role:")
-        print("1. Admin")
-        print("2. Cashier")
+        info("Select role:")
+        console.print("1. Admin")
+        console.print("2. Cashier")
         role_choice = input("Choice (1/2): ").strip()
         if role_choice == "1":
             role = "admin"
         elif role_choice == "2":
             role = "cashier"
         else:
-            print("Invalid role choice.")
+            error("Invalid role choice.")
             return
 
         cur.execute(
@@ -57,6 +60,6 @@ def register_user():
             (username, password, role),
         )
         conn.commit()
-        print(f"✅ User '{username}' registered as {role}.")
+        success(f"User '{username}' registered as {role}.")
     finally:
         conn.close()

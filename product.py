@@ -1,5 +1,5 @@
 from db import get_cursor
-from tabulate import tabulate
+from utils import error, print_table, success
 
 
 def search_product(name):
@@ -10,15 +10,10 @@ def search_product(name):
         )
         rows = cur.fetchall()
         if not rows:
-            print("No matching products.")
+            error("No matching products.")
             return
-        print(
-            tabulate(
-                rows,
-                headers=[i[0] for i in cur.description],
-                tablefmt="rounded_outline",
-            )
-        )
+        headers = [i[0] for i in cur.description]
+        print_table(headers, rows, title="Search Results")
     finally:
         conn.close()
 
@@ -37,7 +32,7 @@ def update_product(name, price=None, qty=None):
                 (qty, name),
             )
         conn.commit()
-        print("Product updated.")
+        success("Product updated.")
     finally:
         conn.close()
 
@@ -47,7 +42,7 @@ def delete_product(name):
     try:
         cur.execute("DELETE FROM product WHERE product_name=%s", (name,))
         conn.commit()
-        print("Product deleted (if it existed).")
+        success("Product deleted (if it existed).")
     finally:
         conn.close()
 
