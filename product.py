@@ -78,3 +78,6 @@ def update_stock(name, qty_sold):
         return cur.rowcount > 0
     finally:
         conn.close()
+        
+        
+        
